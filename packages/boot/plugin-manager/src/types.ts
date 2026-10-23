@@ -165,6 +165,12 @@ export interface ChangeResult {
   error?: ManagementError
   /** Pre-existing inactive entries the operation left as they were. */
   warnings?: string[]
+  /**
+   * Entries of the change that loaded without error but wait for services no plugin provides yet. The change is still
+   * applied: each starts by itself once a provider appears. Installation success, activation state, and failures are
+   * reported separately, so a waiting entry never turns `application` into `failed`.
+   */
+  waiting?: { id: string, name: string, services: string[] }[]
   packageResult?: PackageResult
   /** The bundle an installation added, once pnpm and the bundle check accepted it. */
   bundle?: string

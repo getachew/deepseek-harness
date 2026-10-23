@@ -231,7 +231,7 @@ function printedError(printed: string): string {
 }
 
 /** What applying the saved profile reports into a change result. */
-type Reload = Pick<ChangeResult, 'warnings' | 'restartReason'>
+type Reload = Pick<ChangeResult, 'warnings' | 'restartReason' | 'waiting'>
 
 /** The bundles a profile manifest selects. */
 function bundleSelection(manifest: ProfileManifest): readonly string[] {
@@ -1204,9 +1204,9 @@ export class PluginManager extends TypertRemoteService {
       composeEntries([readProfilePatches('dsh', this.profile)])
       return { warnings: [] }
     }
-    const { warnings, pending, restartReason } = await hmr.reconcileProfile(requiredIds)
+    const { warnings, pending, restartReason, waiting } = await hmr.reconcileProfile(requiredIds)
     const restart = restartReason ?? pending[0]?.reason
-    return restart === undefined ? { warnings } : { warnings, restartReason: restart }
+    return { warnings, ...waiting === undefined ? {} : { waiting }, ...restart === undefined ? {} : { restartReason: restart } }
   }
 
   private async change(

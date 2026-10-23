@@ -277,6 +277,11 @@ export interface ProfileRecompositionOptions {
 export interface ProfileRecomposition {
   /** Diagnostics for unchanged pre-existing inactive entries. */
   warnings: string[]
+  /**
+   * Required entries that loaded without error but wait for services no plugin provides yet. Waiting is not a failure:
+   * such an entry starts by itself once a provider appears, so reactive compositions apply successfully.
+   */
+  waiting?: WaitingEntry[]
   /** Present when the runtime resolution could not publish a moved package or a changed installation mapping. */
   restartReason?: 'package-moved'
 }
@@ -392,9 +397,10 @@ async function recompose(
     await ctx.loader.await()
     const failures = await inactiveEntries(ctx)
     const introduced = failures.filter((failure) => {
-      if (requiredIds.includes(failure.entry.options.id)) return true
-      // An entry waiting for a service starts once a provider appears.
+      // An entry waiting for a service starts once a provider appears, including a required one: waiting is an
+      // activation state, not a failure, and is reported separately below.
       if (failure.outcome.kind === 'pending') return false
+      if (requiredIds.includes(failure.entry.options.id)) return true
       // An entry that ran before the caller stopped it is a new failure even when it failed the same way before.
       if (running.includes(failure.entry)) return true
       return !previousFailures.some(previous => sameFailure(previous, failure))
@@ -404,7 +410,10 @@ async function recompose(
       if (result.status === 'rejected' && !previousFibers[index]?.failed) throw result.reason
     }
     ctx.emit('app-boot/config-reload')
-    return { warnings: failures.map(reloadDiagnostic) }
+    const waiting = failures.flatMap(({ entry, outcome }) => outcome.kind === 'pending' && requiredIds.includes(entry.options.id)
+      ? [{ id: entry.options.id, name: String(entry.options.name), services: outcome.missing }]
+      : [])
+    return { warnings: failures.map(reloadDiagnostic), ...waiting.length > 0 ? { waiting } : {} }
   } finally {
     // Before the generation applies, the rows removed first and the entries the caller stopped run again.
     if (!applying && (stopped.length > 0 || running.length > 0)) {
@@ -428,6 +437,16 @@ async function recompose(
       }
     }
   }
+}
+
+/** A Loader entry waiting for services, identified for callers that report activation state. */
+export interface WaitingEntry {
+  /** The entry's patch id. */
+  id: string
+  /** The plugin module name. */
+  name: string
+  /** Services the entry injects that no plugin provides yet. */
+  services: string[]
 }
 
 /** An inactive entry as a recomposition found it before changing anything. */

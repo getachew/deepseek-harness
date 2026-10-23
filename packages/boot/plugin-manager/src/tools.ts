@@ -55,7 +55,10 @@ const RESTART_STEPS: Record<RestartReason, string> = {
 function withNextStep(result: ChangeResult): ChangeResult & { nextStep?: string } {
   switch (result.application) {
     case 'applied':
-      return result
+      return result.waiting === undefined || result.waiting.length === 0 ? result : {
+        ...result,
+        nextStep: 'Applied. Each entry in waiting is loaded and starts by itself once a plugin provides the services it lists; this is not a failure, so do not retry, disable or remove it.',
+      }
     case 'cancelled':
       return { ...result, nextStep: 'The installation was cancelled and its files restored; nothing changed.' }
     case 'overridden':

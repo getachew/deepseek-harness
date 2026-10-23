@@ -893,6 +893,26 @@ it('replaces running plugins before reporting a recomposition failure', async ()
   expect(f.trace).toEqual(['stop:1', 'start:1:2:-'])
 })
 
+it('reports a required entry waiting for a service as waiting, not failed, and starts it once a provider appears', async () => {
+  const f = await fixture()
+  writeFileSync(join(f.dir, 'waiting.mjs'), 'export const inject = [\'reactiveDep\']\nexport function apply() {}\n')
+  writeFileSync(join(f.dir, 'provider.mjs'), 'export function apply(ctx) { ctx.provide(\'reactiveDep\', {}) }\n')
+  const rows = [
+    { id: 'timer', name: 'cordis:timer' },
+    { id: 'hmr', name: 'cordis:hmr', config: { root: [] } },
+    { id: 'waiting', name: './waiting.mjs' },
+  ]
+  writeFileSync(join(f.dir, 'cordis.patch.yml'), JSON.stringify([{ insert: rows }]))
+  const result = await f.ctx.hmr.runExclusive(() => f.ctx.hmr.reconcileProfile(['waiting']))
+  expect(result.waiting).toEqual([{ id: 'waiting', name: expect.stringMatching(/waiting\.mjs$/), services: ['reactiveDep'] }])
+  const entry = [...f.ctx.loader.entries()].find(row => row.options.id === 'waiting')
+  expect(entry?.fiber?.state).not.toBe(FiberState.ACTIVE)
+  writeFileSync(join(f.dir, 'cordis.patch.yml'), JSON.stringify([{ insert: [...rows, { id: 'provider', name: './provider.mjs' }] }]))
+  const next = await f.ctx.hmr.runExclusive(() => f.ctx.hmr.reconcileProfile(['waiting', 'provider']))
+  expect(next.waiting).toBeUndefined()
+  expect([...f.ctx.loader.entries()].find(row => row.options.id === 'waiting')?.fiber?.state).toBe(FiberState.ACTIVE)
+})
+
 it('reconciles only inside an HMR transaction of a profile application', async () => {
   const f = await fixture()
   await expect(f.ctx.hmr.reconcileProfile()).rejects.toThrow('must run inside runExclusive')

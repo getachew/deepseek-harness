@@ -968,7 +968,11 @@ class Hmr extends Service {
       }, undefined)
       const result = await recomposeProfile(this.ownerContext.root, patches, 'dsh', { requiredIds, running })
       const restartReason = compared === undefined || unavailable ? 'module-comparison' : result.restartReason
-      return { warnings: result.warnings, pending, ...restartReason === undefined ? {} : { restartReason } }
+      return {
+        warnings: result.warnings, pending,
+        ...result.waiting === undefined ? {} : { waiting: result.waiting },
+        ...restartReason === undefined ? {} : { restartReason },
+      }
     } finally {
       const recorded = comparison
       await this.contained('evicting dropped packages', () => {
@@ -1005,6 +1009,8 @@ interface ReplacementPlan {
 export interface ProfileReconciliation {
   /** Diagnostics for Loader entries left inactive. */
   warnings: string[]
+  /** Required entries waiting for services that no plugin provides yet; they start once a provider appears. */
+  waiting?: { id: string, name: string, services: string[] }[]
   /** Loaded modules whose files changed on disk and whose previous code keeps running until a restart. */
   pending: PendingModule[]
   /**
